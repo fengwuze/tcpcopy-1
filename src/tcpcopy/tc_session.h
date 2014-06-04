@@ -1,0 +1,140 @@
+#ifndef  TC_SESSION_INCLUDED
+#define  TC_SESSION_INCLUDED
+
+#include <xcopy.h>
+#include <tcpcopy.h>
+
+#define FFRAME_LEN (60 + ETHERNET_HDR_LEN)
+#define FMIN_IP_LEN (IPH_MIN_LEN + (TCPH_DOFF_MIN_VALUE << 2))
+#define FIP_TS_LEN (IPH_MIN_LEN + (TCPH_DOFF_TS_VALUE << 2))
+#define FSYN_IP_LEN (IPH_MIN_LEN + (TCPH_DOFF_MSS_VALUE << 2))
+#define FSYN_IP_TS_LEN (IPH_MIN_LEN + (TCPH_DOFF_WS_TS_VALUE << 2))
+
+
+/* global functions */
+int  init_sess_table();
+void destroy_sess_table();
+void save_packet(tc_sess_t *, link_list *, tc_iph_t *, tc_tcph_t *);
+bool proc_ingress(tc_iph_t *, tc_tcph_t *);
+bool proc_outgress(unsigned char *);
+bool check_ingress_pack_needed(tc_iph_t *);
+void interval_dispose(tc_event_timer_t *);
+void output_stat();
+
+
+typedef struct sess_state_machine_s{
+    uint32_t state:10;
+    uint32_t rcv_nxt_sess:1;
+    uint32_t candidate_rep_wait:1;
+    uint32_t recon:1;
+    uint32_t max_record_con_seq:1;
+    uint32_t rcv_rep_greet:1;
+    uint32_t window_full:1;
+    uint32_t internal_usage:1;
+    uint32_t timeout:1;
+    uint32_t delay_snd:1;
+    uint32_t req_ack_snd:1;
+    uint32_t fake_syn:1;
+    uint32_t timestamp:1;
+    uint32_t need_rep_greet:1;
+    uint32_t already_retrans:1;
+    uint32_t sess_over:1;
+    uint32_t src_closed:1;
+    uint32_t dst_closed:1;
+    uint32_t pool_loop_used:1;
+    uint32_t timer_type:2;
+    uint32_t rtt_cal:2;
+    uint32_t rep_payload_type:2;
+    uint32_t rep_dup_ack_cnt:8;
+    uint32_t small_payload_cnt:8;
+}sess_state_machine_t;
+
+typedef struct pack_info_s {
+    uint32_t cont_len:16;
+    uint32_t new_req_flag:1;
+    uint32_t seq;
+    uint32_t ack_seq;
+}pack_info_t;
+
+struct tc_sess_s {
+    sess_state_machine_t sm; 
+
+    pack_info_t cur_pack;
+
+    /* ack sequence that is sent to backend (host byte order) */
+    uint32_t target_ack_seq;
+    /* next sequence that is sent to backend (host byte order) */
+    uint32_t target_nxt_seq;
+
+    uint32_t max_con_seq;
+
+    /* src or client ip address(network byte order) */
+    uint32_t src_addr;
+    /* dst or backend ip address(network byte order) */
+    uint32_t dst_addr;
+    /* online ip address(network byte order) */
+    uint32_t online_addr; 
+    /* src or client port(network byte order) */
+    uint16_t src_port;
+    /* dst or backend port(network byte order) */
+    uint16_t dst_port;
+    /* online port(network byte order) */
+    uint16_t online_port;
+    uint16_t req_ip_id;
+    uint16_t wscale;
+    uint16_t rtt;
+    
+    uint32_t peer_window;
+    uint32_t ts_ec_r;
+    uint32_t ts_value;
+
+    /* captured variables */
+    /* only refer to online values */
+    /***********************begin************************/
+    /* last sequence of client content packet which has been sent */
+    uint32_t req_con_snd_seq;
+    /* last ack sequence of client packet which is sent to bakend */
+    uint32_t req_ack_snd_seq;
+    /* last client content packet's ack sequence which is captured */
+    uint32_t req_con_ack_seq;
+    uint32_t req_con_cur_ack_seq;
+    /* last syn sequence of client packet */
+    uint32_t req_syn_seq;
+    /***********************end***************************/
+
+    /* response variables */
+    /* last acknowledgement seq from backend response (host byte order) */
+    uint32_t rep_ack_seq;
+    /* last seq from backend response (host byte order) */
+    uint32_t rep_seq;
+#if (TC_DEBUG)
+    uint32_t rep_ack_seq_bf_fin;
+#endif
+
+    /* hash key for this session */
+    uint64_t hash_key;
+
+    time_t   create_time;
+    /* time of sending the last content packet */
+    time_t   req_snd_con_time;
+    /* time of last receiving backend content */
+    time_t   rep_rcv_con_time;
+
+    unsigned char *frame;
+    unsigned char *src_mac;
+    unsigned char *dst_mac;
+
+    link_list *slide_win_packs;
+    link_node *prev_snd_node;
+
+#if (TC_PLUGIN)
+    void             *data;
+#endif
+    tc_event_timer_t *ev;
+    tc_event_timer_t *gc_ev;
+    tc_pool_t *pool;
+};
+
+
+#endif   /* ----- #ifndef TC_SESSION_INCLUDED ----- */
+
