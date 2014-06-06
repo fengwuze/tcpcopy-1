@@ -12,14 +12,14 @@
 
 
 /* global functions */
-int  init_sess_table();
-void destroy_sess_table();
-void save_packet(tc_sess_t *, link_list *, tc_iph_t *, tc_tcph_t *);
-bool proc_ingress(tc_iph_t *, tc_tcph_t *);
-bool proc_outgress(unsigned char *);
-bool check_ingress_pack_needed(tc_iph_t *);
-void interval_dispose(tc_event_timer_t *);
-void output_stat();
+int  tc_init_sess_table();
+void tc_dest_sess_table();
+void tc_save_pack(tc_sess_t *, link_list *, tc_iph_t *, tc_tcph_t *);
+bool tc_proc_ingress(tc_iph_t *, tc_tcph_t *);
+bool tc_proc_outgress(unsigned char *);
+bool tc_check_ingress_pack_needed(tc_iph_t *);
+void tc_interval_disp(tc_event_timer_t *);
+void tc_output_stat();
 
 
 typedef struct sess_state_machine_s{
@@ -27,7 +27,7 @@ typedef struct sess_state_machine_s{
     uint32_t rcv_nxt_sess:1;
     uint32_t candidate_rep_wait:1;
     uint32_t recon:1;
-    uint32_t max_record_con_seq:1;
+    uint32_t record_mcon_seq:1;
     uint32_t rcv_rep_greet:1;
     uint32_t window_full:1;
     uint32_t internal_usage:1;

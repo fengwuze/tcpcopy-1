@@ -149,8 +149,6 @@ tc_type="rlim_t"; tc_types="int"; . auto/types/typedef
 
 . auto/types/uintptr_t
 
-. auto/endianness
-
 tc_type="size_t"; . auto/types/sizeof
 tc_param=TC_MAX_SIZE_T_VALUE; tc_value=$tc_max_value; . auto/types/value
 tc_param=TC_SIZE_T_LEN; tc_value=$tc_max_len; . auto/types/value

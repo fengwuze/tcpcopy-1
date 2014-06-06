@@ -36,6 +36,7 @@ link_list_append(link_list *l, p_link_node p)
     l->size++;
 }
 
+
 static inline void 
 link_list_push(link_list *l, p_link_node p)
 {
@@ -48,6 +49,7 @@ link_list_push(link_list *l, p_link_node p)
     p->prev      = &(l->head);
     l->size++;
 }
+
 
 static inline p_link_node 
 link_list_remove(link_list *l, p_link_node node)
@@ -62,6 +64,7 @@ link_list_remove(link_list *l, p_link_node node)
     return node;
 }
 
+
 static inline p_link_node 
 link_list_first(link_list *l)
 {
@@ -72,6 +75,7 @@ link_list_first(link_list *l)
     return l->head.next;
 }
 
+
 static inline p_link_node 
 link_list_tail(link_list *l)
 {
@@ -81,6 +85,7 @@ link_list_tail(link_list *l)
 
     return l->head.prev;
 }
+
 
 static inline p_link_node
 link_list_pop_first(link_list *l)
@@ -94,6 +99,7 @@ link_list_pop_first(link_list *l)
     return link_list_remove(l, first);
 }
 
+
 static inline p_link_node
 link_list_pop_tail(link_list *l)
 {
@@ -106,6 +112,7 @@ link_list_pop_tail(link_list *l)
     return link_list_remove(l, tail);
 }
 
+
 static inline p_link_node
 link_list_get_next(link_list *l, p_link_node p)
 {
@@ -115,6 +122,7 @@ link_list_get_next(link_list *l, p_link_node p)
 
     return p->next;
 } 
+
 
 static inline bool
 link_list_is_empty(link_list *l)

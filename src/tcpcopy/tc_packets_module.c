@@ -207,7 +207,7 @@ proc_pcap_pack(tc_event_t *rev)
 static int 
 proc_raw_pack(tc_event_t *rev)
 {
-    int  recv_len;
+    int           recv_len;
     unsigned char packet[IP_RCV_BUF_SIZE];
 
     for ( ;; ) {
@@ -240,11 +240,10 @@ proc_raw_pack(tc_event_t *rev)
 
 #if (TC_UDP)
 static void
-replicate_packs(tc_iph_t *ip, tc_udpt_t *udp_header, 
-        int replica_num)
+replicate_packs(tc_iph_t *ip, tc_udpt_t *udp_header, int replica_num)
 {
-    int              i;
-    uint16_t         orig_port, addition, dest_port, rand_port;
+    int       i;
+    uint16_t  orig_port, addition, dest_port, rand_port;
 
     orig_port  = ntohs(udp_header->source);
 
@@ -258,7 +257,7 @@ replicate_packs(tc_iph_t *ip, tc_udpt_t *udp_header,
         tc_log_debug2(LOG_DEBUG, 0, "new port:%u,add:%u", dest_port, addition);
 
         udp_header->source = htons(dest_port);
-        proc_ingress(ip, udp_header);
+        tc_proc_ingress(ip, udp_header);
     }
 }
 
@@ -266,9 +265,9 @@ replicate_packs(tc_iph_t *ip, tc_udpt_t *udp_header,
 static int
 dispose_packet(unsigned char *packet, int ip_rcv_len, int *p_valid_flag)
 {
-    int              replica_num;
-    bool             packet_valid;
-    uint16_t         size_ip;
+    int        replica_num;
+    bool       packet_valid;
+    uint16_t   size_ip;
     tc_iph_t  *ip;
     tc_udpt_t *udp_header;
 
@@ -278,7 +277,7 @@ dispose_packet(unsigned char *packet, int ip_rcv_len, int *p_valid_flag)
 
     ip = (tc_iph_t *) packet;
 
-    if (check_ingress_pack_needed(ip)) {
+    if (tc_check_ingress_pack_needed(ip)) {
 
         replica_num = clt_settings.replica_num;
         ip   = (tc_iph_t *) packet;
@@ -286,7 +285,7 @@ dispose_packet(unsigned char *packet, int ip_rcv_len, int *p_valid_flag)
         size_ip     = ip->ihl << 2;
         udp_header  = (tc_udpt_t *) ((char *) ip + size_ip);
 
-        packet_valid = proc_ingress(ip, udp_header);
+        packet_valid = tc_proc_ingress(ip, udp_header);
           
         if (replica_num > 1) {
             replicate_packs(ip, udp_header, replica_num);
@@ -304,11 +303,10 @@ dispose_packet(unsigned char *packet, int ip_rcv_len, int *p_valid_flag)
 
 /* replicate packets for multiple-copying */
 static void
-replicate_packs(tc_iph_t *ip, tc_tcph_t *tcp, 
-        int replica_num)
+replicate_packs(tc_iph_t *ip, tc_tcph_t *tcp, int replica_num)
 {
-    int               i;
-    uint16_t          orig_port, addition, dest_port, rand_port;
+    int       i;
+    uint16_t  orig_port, addition, dest_port, rand_port;
     
     rand_port  = clt_settings.rand_port_shifted;
     orig_port  = ntohs(tcp->source);
@@ -320,7 +318,7 @@ replicate_packs(tc_iph_t *ip, tc_tcph_t *tcp,
         tcp->source = htons(dest_port);
         tc_log_debug2(LOG_DEBUG, 0, "orig port :%u,new port:%u", 
                 orig_port, dest_port);
-        proc_ingress(ip, tcp);
+        tc_proc_ingress(ip, tcp);
     }
 }
 
@@ -328,13 +326,13 @@ replicate_packs(tc_iph_t *ip, tc_tcph_t *tcp,
 static int
 dispose_packet(unsigned char *packet, int ip_rcv_len, int *p_valid_flag)
 {
-    int              replica_num, i, last, packet_num, max_payload,
-                     index, payload_len;
-    char             *p, buf[IP_RCV_BUF_SIZE];
-    bool             packet_valid;
-    uint16_t         id, size_ip, size_tcp, tot_len, cont_len, 
-                     pack_len, head_len;
-    uint32_t         seq;
+    int        replica_num, i, last, packet_num, max_payload,
+               index, payload_len;
+    char      *p, buf[IP_RCV_BUF_SIZE];
+    bool       packet_valid;
+    uint16_t   id, size_ip, size_tcp, tot_len, cont_len, 
+               pack_len, head_len;
+    uint32_t   seq;
     tc_iph_t  *ip;
     tc_tcph_t *tcp;
 
@@ -343,14 +341,14 @@ dispose_packet(unsigned char *packet, int ip_rcv_len, int *p_valid_flag)
     }
 
     ip   = (tc_iph_t *) packet;
-    if (check_ingress_pack_needed(ip)) {
+    if (tc_check_ingress_pack_needed(ip)) {
 
         replica_num = clt_settings.replica_num;
         size_ip     = ip->ihl << 2;
         tcp  = (tc_tcph_t *) ((char *) ip + size_ip);
 
         if (ip_rcv_len <= clt_settings.mtu) {
-            packet_valid = proc_ingress(ip, tcp);
+            packet_valid = tc_proc_ingress(ip, tcp);
             if (replica_num > 1) {
                 replicate_packs(ip, tcp, replica_num);
             }
@@ -397,7 +395,7 @@ dispose_packet(unsigned char *packet, int ip_rcv_len, int *p_valid_flag)
                 /* copy payload here */
                 memcpy(p, (char *) (packet + index), payload_len);
                 index = index + payload_len;
-                packet_valid = proc_ingress(ip, tcp);
+                packet_valid = tc_proc_ingress(ip, tcp);
                 if (replica_num > 1) {
                     replicate_packs(ip, tcp, replica_num);
                 }

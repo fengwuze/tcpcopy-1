@@ -4,15 +4,15 @@
 
 static bool retrans_pack(tc_sess_t *, uint32_t);
 static bool proc_clt_pack_from_buffer(tc_sess_t *);
-static void tc_snd_pack(tc_sess_t *, tc_iph_t *, tc_tcph_t *, bool);
-static void tc_user_timer_dispose(tc_sess_t *, int, int);
+static void send_pack(tc_sess_t *, tc_iph_t *, tc_tcph_t *, bool);
+static void utimer_disp(tc_sess_t *, int, int);
 static void update_retrans_packs(tc_sess_t *);
 static void snd_rst(tc_sess_t *);
 static void update_timestamp(tc_sess_t *, tc_tcph_t *);
 static void send_faked_ack_from_timer(tc_sess_t *);
 static void proc_bak_fin(tc_sess_t *, tc_iph_t *, tc_tcph_t *);
 static void proc_bak_syn(tc_sess_t *, tc_iph_t *, tc_tcph_t *);
-static void tc_check_sess_timeout(tc_event_timer_t *ev);
+static void sess_timeout(tc_event_timer_t *ev);
 static inline void fill_pro_common_header(tc_iph_t *, tc_tcph_t *);
 static inline int overwhelm(tc_sess_t *, const char *, int, int);
 static inline tc_sess_t *sess_add(uint64_t, tc_iph_t *, tc_tcph_t *);
@@ -25,10 +25,10 @@ reconstruct_sess(tc_sess_t *s)
 
     tc_log_debug1(LOG_INFO, 0, "sess reconstruct:%u", ntohs(s->src_port));
     tc_memzero(&(s->sm), sizeof(sess_state_machine_t));
-    s->sm.max_record_con_seq = 1;
+    s->sm.record_mcon_seq = 1;
     s->sm.recon = 1;
     tc_log_debug2(LOG_INFO, 0, "rtt:%u,p:%u", s->rtt, ntohs(s->src_port));
-    tc_user_timer_dispose(s, s->rtt, TYPE_RECONSTRUCT);
+    utimer_disp(s, s->rtt, TYPE_RECONSTRUCT);
 }
 
 
@@ -44,7 +44,7 @@ sess_post_disp(tc_sess_t *s,  bool complete)
         }
 
 #if (TC_DEBUG)
-        if (s->sm.max_record_con_seq) {
+        if (s->sm.record_mcon_seq) {
             if (s->sm.state < SND_REQ) {
                 tc_log_debug3(LOG_INFO, 0, "req unsend:%u,syn seq:%u,max:%u",
                         ntohs(s->src_port), s->req_syn_seq, s->max_con_seq);
@@ -126,7 +126,7 @@ snd_rst(tc_sess_t *s)
 
     s->frame = frame;
     s->cur_pack.cont_len = 0;
-    tc_snd_pack(s, ip, tcp, true);
+    send_pack(s, ip, tcp, true);
 }
 
 
@@ -144,32 +144,27 @@ fill_pro_common_header(tc_iph_t *ip, tc_tcph_t *tcp)
 
 
 int
-init_sess_table()
+tc_init_sess_table()
 {
-    tc_pool_t *pool;
-
-    pool = tc_create_pool(SESS_TABLE_POOL_SIZE, 0);
-    
+    tc_pool_t *pool = tc_create_pool(SESS_TABLE_POOL_SIZE, 0);
     if (pool != NULL) {
         sess_table = hash_create(pool, 65536);
-
         if (sess_table != NULL) {
             return TC_OK;
         }
     }
-
     return TC_ERR;
 }
 
 
 void
-destroy_sess_table()
+tc_dest_sess_table()
 {
     size_t       i;           
     tc_sess_t   *s;
     hash_node   *hn;
     link_list   *list;
-    p_link_node  ln, tmp_ln;
+    p_link_node  ln, tln;
 
     if (sess_table != NULL) {
         tc_log_info(LOG_INFO, 0, "session table, size:%u, total:%u",
@@ -178,14 +173,14 @@ destroy_sess_table()
             list = sess_table->lists[i];
             ln   = link_list_first(list);   
             while (ln) {
-                tmp_ln = link_list_get_next(list, ln);
+                tln = link_list_get_next(list, ln);
                 hn = (hash_node *) ln->data;
                 if (hn->data != NULL) {
                     s = hn->data;
                     hn->data = NULL;
                     sess_post_disp(s, true);
                 }
-                ln = tmp_ln;
+                ln = tln;
             }
         }
         tc_destroy_pool(sess_table->pool);
@@ -235,8 +230,8 @@ sess_create(tc_iph_t *ip, tc_tcph_t *tcp)
         s->online_addr    = ip->daddr;
         s->src_port       = tcp->source;
         s->online_port    = tcp->dest;
-        test = get_test_pair(&(clt_settings.transfer), 
-                s->online_addr, s->online_port);
+        test = get_test_pair(&(clt_settings.transfer), s->online_addr, 
+                s->online_port);
         s->dst_addr       = test->target_ip;
         s->dst_port       = test->target_port;
 #if (TC_PCAP_SND)
@@ -249,7 +244,7 @@ sess_create(tc_iph_t *ip, tc_tcph_t *tcp)
         }
 
         s->gc_ev = tc_event_add_timer(s->pool, SESS_EST_MS_TIMEOUT, s, 
-                tc_check_sess_timeout);
+                sess_timeout);
 
 #if (TC_PLUGIN)
         if (clt_settings.plugin && clt_settings.plugin->proc_when_sess_created)
@@ -264,16 +259,13 @@ sess_create(tc_iph_t *ip, tc_tcph_t *tcp)
 
 
 static int
-check_sess_obsolete(tc_sess_t *s, time_t cur, time_t thrsh_time,
-        time_t thrsh_keep_time)
+sess_obso(tc_sess_t *s, time_t cur, time_t thrsh_time, time_t thrsh_keep_time)
 {
     int threshold, diff;
     
     if (s->rep_rcv_con_time < thrsh_time) {
         if (s->slide_win_packs->size > 0) {
             tc_stat.obs_cnt++;
-            tc_log_debug2(LOG_DEBUG, 0, "timeout, slide win number:%u,p:%u",
-                    s->slide_win_packs->size, ntohs(s->src_port));
             return OBSOLETE;
         }  else {
             if (s->sm.state >= SND_REQ) {
@@ -335,7 +327,7 @@ overwhelm(tc_sess_t *s, const char *m, int max_hold_packs, int size)
 
 
 static void
-tc_check_sess_timeout(tc_event_timer_t *ev)
+sess_timeout(tc_event_timer_t *ev)
 {
     int        result;
     time_t     now, thrsh_time, thrsh_keep_time;
@@ -356,7 +348,7 @@ tc_check_sess_timeout(tc_event_timer_t *ev)
 
         result = NOT_YET_OBSOLETE;
         if (s->sm.state >= ESTABLISHED) {
-            result = check_sess_obsolete(s, now, thrsh_time, thrsh_keep_time);
+            result = sess_obso(s, now, thrsh_time, thrsh_keep_time);
         } else {
             result = OBSOLETE;
             tc_log_debug1(LOG_INFO, 0, "est timeout:%u", ntohs(s->src_port));
@@ -412,8 +404,6 @@ retrans_ip_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
     ip->check = csum((unsigned short *) ip,size_ip);
 #endif
 
-    tc_log_trace(LOG_NOTICE, 0, TC_TO_BAK, ip, tcp);
-
 #if (!TC_PCAP_SND)
     ret = tc_raw_socket_snd(tc_raw_socket_out, ip, tot_len, ip->daddr);
 #else
@@ -434,7 +424,7 @@ retrans_ip_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 
 
 static void
-tc_snd_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp, bool client)
+send_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp, bool client)
 {
     int        ret;
     uint16_t   size_ip, tot_len;
@@ -497,8 +487,8 @@ tc_snd_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp, bool client)
         tcp->ack_seq = s->target_ack_seq;
     }
 
-    size_ip    = ip->ihl << 2;
-    tot_len  = ntohs(ip->tot_len);
+    size_ip = ip->ihl << 2;
+    tot_len = ntohs(ip->tot_len);
 
     /* It should be set to zero for tcp checksum */
     tcp->check = 0;
@@ -643,7 +633,7 @@ send_faked_ack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp, bool active)
 
     s->frame = frame;
     s->cur_pack.cont_len = 0;
-    tc_snd_pack(s, f_ip, f_tcp,  false);
+    send_pack(s, f_ip, f_tcp,  false);
 }
 
 
@@ -680,7 +670,7 @@ send_faked_rst(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 
     s->frame = frame;
     s->cur_pack.cont_len  = 0;
-    tc_snd_pack(s, f_ip, f_tcp, false);
+    send_pack(s, f_ip, f_tcp, false);
 }
 
 
@@ -779,7 +769,7 @@ send_faked_syn(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
     opt[1] = 4;
     bcopy((void *) &mss, (void *) (opt + 2), sizeof(mss));
 
-    s->req_ip_id = ntohs(ip->id);
+    s->req_ip_id  = ntohs(ip->id);
     f_ip->id      = htons(s->req_ip_id - 2);
     f_ip->saddr   = ip->saddr;
     f_ip->daddr   = ip->daddr;
@@ -796,7 +786,7 @@ send_faked_syn(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 
     s->cur_pack.cont_len = 0;
     s->frame = frame;
-    tc_snd_pack(s, f_ip, f_tcp, true);
+    send_pack(s, f_ip, f_tcp, true);
 }
 
 
@@ -827,13 +817,13 @@ fake_syn(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 static bool 
 retrans_pack(tc_sess_t *s, uint32_t expected_seq)
 {
-    bool              find_and_retransmit;
-    uint16_t          size_ip, cont_len;
-    uint32_t          cur_seq, next_expected_seq;
-    tc_iph_t         *ip;
-    tc_tcph_t        *tcp;
-    link_list        *list;
-    p_link_node       ln, tmp_ln;
+    bool            find_and_retransmit;
+    uint16_t        size_ip, cont_len;
+    uint32_t        cur_seq, next_expected_seq;
+    tc_iph_t       *ip;
+    tc_tcph_t      *tcp;
+    link_list      *list;
+    p_link_node     ln, tln;
 
     if (s->sm.state == SYN_SENT) {
         return true;
@@ -845,12 +835,12 @@ retrans_pack(tc_sess_t *s, uint32_t expected_seq)
 
     while (ln) {
 
-        s->frame   = ln->data;
-        ip         = (tc_iph_t *) (s->frame + ETHERNET_HDR_LEN);
-        size_ip    = ip->ihl << 2;
-        tcp        = (tc_tcph_t *) ((char *) ip + size_ip);
-        cur_seq    = ntohl(tcp->seq);  
-        cont_len   = TCP_PAYLOAD_LENGTH(ip, tcp);
+        s->frame  = ln->data;
+        ip        = (tc_iph_t *) (s->frame + ETHERNET_HDR_LEN);
+        size_ip   = ip->ihl << 2;
+        tcp       = (tc_tcph_t *) ((char *) ip + size_ip);
+        cur_seq   = ntohl(tcp->seq);  
+        cont_len  = TCP_PAYLOAD_LENGTH(ip, tcp);
 
         if (cont_len > 0) {
             if (cur_seq == expected_seq) {
@@ -880,11 +870,11 @@ retrans_pack(tc_sess_t *s, uint32_t expected_seq)
             tc_stat.retrans_cnt++;
             break;
         } else {
-            tmp_ln = ln;
+            tln = ln;
             ln = link_list_get_next(list, ln);
-            link_list_remove(list, tmp_ln);
-            tc_pfree(s->pool, tmp_ln->data);
-            tc_pfree(s->pool, tmp_ln);
+            link_list_remove(list, tln);
+            tc_pfree(s->pool, tln->data);
+            tc_pfree(s->pool, tln);
         }
     }
 
@@ -990,7 +980,7 @@ send_faked_third_handshake(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 
     s->frame = frame;
     s->cur_pack.cont_len  = 0;
-    tc_snd_pack(s, f_ip, f_tcp, false);
+    send_pack(s, f_ip, f_tcp, false);
 }
 
 
@@ -1006,13 +996,13 @@ tc_delay_ack(tc_sess_t *s, tc_event_timer_t *ev)
                 rtt = s->rtt >> 1;
             } else {
                 rtt = s->rtt;
-                if (s->sm.max_record_con_seq) {
+                if (s->sm.record_mcon_seq) {
                     if (after(s->max_con_seq, s->target_nxt_seq)) {
                         rtt = rtt >> 1;
                     }
                 }
             }
-            tc_user_timer_dispose(s, rtt, TYPE_DELAY_ACK);
+            utimer_disp(s, rtt, TYPE_DELAY_ACK);
             s->sm.rep_payload_type = 0;
         } else {
             if (!s->sm.delay_snd) {
@@ -1066,7 +1056,7 @@ send_faked_ack_from_timer(tc_sess_t *s)
 
     s->frame = frame;
     s->cur_pack.cont_len = 0;
-    tc_snd_pack(s, ip, tcp, false);
+    send_pack(s, ip, tcp, false);
 }
 
 
@@ -1079,6 +1069,7 @@ shrink_rtt(tc_sess_t *s)
         s->rtt = s->rtt ? s->rtt:1;
     }
 }
+
 
 static void 
 tc_lantency_ctl(tc_event_timer_t *ev)
@@ -1110,11 +1101,9 @@ tc_lantency_ctl(tc_event_timer_t *ev)
 
 
 static void
-tc_user_timer_dispose(tc_sess_t *s, int lty, int type)
+utimer_disp(tc_sess_t *s, int lty, int type)
 {
-    int timeout;
-
-    timeout = lty > 0 ? lty:1;
+    int timeout = lty > 0 ? lty:1;
 
     if (s->ev) {
         tc_event_update_timer(s->ev, timeout);
@@ -1135,7 +1124,7 @@ update_retrans_packs(tc_sess_t *s)
     tc_iph_t        *ip;
     tc_tcph_t       *tcp;
     link_list       *list;
-    p_link_node      ln, tmp_ln;
+    p_link_node      ln, tln;
     unsigned char   *frame;
 
     list = s->slide_win_packs;
@@ -1156,15 +1145,15 @@ update_retrans_packs(tc_sess_t *s)
                 tc_log_debug1(LOG_INFO, 0, "prev=nul:%u", ntohs(s->src_port));
             }
             tc_log_debug1(LOG_DEBUG, 0, "win forward:%u", ntohs(s->src_port));
-            tmp_ln = ln;
+            tln = ln;
             ln = link_list_get_next(list, ln);
-            link_list_remove(list, tmp_ln);
+            link_list_remove(list, tln);
             if (!s->sm.pool_loop_used) {
-                tc_pfree(s->pool, tmp_ln->data);
-                tc_pfree(s->pool, tmp_ln);
+                tc_pfree(s->pool, tln->data);
+                tc_pfree(s->pool, tln);
             } else {
-                tc_pool_loop_free(s->pool, tmp_ln->data);
-                tc_pool_loop_free(s->pool, tmp_ln);
+                tc_pool_loop_free(s->pool, tln->data);
+                tc_pool_loop_free(s->pool, tln);
             }
         } else {
             break;
@@ -1174,18 +1163,15 @@ update_retrans_packs(tc_sess_t *s)
 
 
 static int
-check_backend_ack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
+check_bak_ack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 {
-    bool slide_window_empty;
+    bool slide_win_empty;
 
     if (s->cur_pack.ack_seq == s->target_nxt_seq) {
         return PACK_CONTINUE;
     }
 
     if (before(s->cur_pack.ack_seq, s->target_nxt_seq)) {
-
-        tc_log_debug3(LOG_DEBUG, 0, "ack less than target_nxt_seq:%u,%u,p:%u",
-                s->cur_pack.ack_seq, s->target_nxt_seq, ntohs(s->src_port));
 
         if (s->sm.state < SYN_CONFIRM && !tcp->syn) {
             send_faked_rst(s, ip, tcp);
@@ -1202,12 +1188,12 @@ check_backend_ack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
             return PACK_STOP;
         } 
 
-        slide_window_empty = false;
+        slide_win_empty = false;
 
         if (tcp->window > 0 && s->sm.window_full) {
             s->sm.window_full     = 0;
             s->sm.rep_dup_ack_cnt = 0;
-            slide_window_empty    = true;
+            slide_win_empty    = true;
         } else if (tcp->window == 0) {
             tc_log_info(LOG_NOTICE, 0, "win zero:%u", ntohs(s->src_port));
             s->sm.window_full  = 1;
@@ -1228,13 +1214,10 @@ check_backend_ack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
             s->sm.rep_dup_ack_cnt++;
             if (s->sm.rep_dup_ack_cnt >= 3) {
                 if (!s->sm.already_retrans) {
-                    tc_log_info(LOG_WARN, 0, "bak lost packs:%u,same ack:%d", 
-                            ntohs(s->src_port), s->sm.rep_dup_ack_cnt);
-
                     retrans_pack(s, s->cur_pack.ack_seq);
                     tc_event_update_timer(s->ev, s->rtt);
 
-                    if (slide_window_empty) {
+                    if (slide_win_empty) {
                         proc_clt_pack_from_buffer(s);
                     }
                     return PACK_STOP;
@@ -1253,9 +1236,7 @@ static inline void
 check_pack_full(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 {
     int      index, offset, bit_value, value;
-    uint16_t tot_len;
-    
-    tot_len = ntohs(ip->tot_len);
+    uint16_t tot_len = ntohs(ip->tot_len);
 
     if (tot_len < MAX_CHECKED_MTU) {
         index = tot_len >> 3;
@@ -1301,7 +1282,7 @@ check_resp_greet(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 
 
 void
-proc_backend_packet(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
+proc_bak_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 {
 
     tc_stat.resp_cnt++;
@@ -1337,7 +1318,7 @@ proc_backend_packet(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
             s->target_ack_seq = tcp->seq;
         }
 
-        if (check_backend_ack(s, ip, tcp) != PACK_STOP) {
+        if (check_bak_ack(s, ip, tcp) != PACK_STOP) {
             s->rep_seq = s->cur_pack.seq;
             if (s->rep_ack_seq != s->cur_pack.ack_seq) {
                 s->rep_ack_seq = s->cur_pack.ack_seq;
@@ -1372,7 +1353,7 @@ proc_backend_packet(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
                     proc_clt_pack_from_buffer(s);
                     s->sm.rep_payload_type = 0;
                 } else {
-                    tc_user_timer_dispose(s, s->rtt, TYPE_DELAY_ACK);
+                    utimer_disp(s, s->rtt, TYPE_DELAY_ACK);
                     s->sm.candidate_rep_wait = 1;
                 }
 
@@ -1392,7 +1373,7 @@ proc_backend_packet(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
         }
     } else {
         tc_log_debug1(LOG_DEBUG, 0, "reset:%u", ntohs(s->src_port));
-        if (s->sm.max_record_con_seq) {
+        if (s->sm.record_mcon_seq) {
             if (after(s->max_con_seq, s->req_con_snd_seq)) {
                 reconstruct_sess(s);
                 return;
@@ -1457,7 +1438,7 @@ proc_bak_fin(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
         cont_len = s->cur_pack.cont_len;
         send_faked_ack(s, ip, tcp, false);
         tcp->seq = htonl(s->cur_pack.seq + 1);
-        if (s->sm.max_record_con_seq) {
+        if (s->sm.record_mcon_seq) {
             if (after(s->max_con_seq, s->req_con_snd_seq)) {
                 reconstruct_sess(s);
                 return;
@@ -1476,7 +1457,7 @@ proc_bak_fin(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 
 
 bool
-proc_outgress(unsigned char *pack)
+tc_proc_outgress(unsigned char *pack)
 {
     uint16_t     size_ip;
     uint64_t     key;
@@ -1496,7 +1477,7 @@ proc_outgress(unsigned char *pack)
         if (s->sm.state >= SYN_CONFIRM || tcp->syn) {
             if (!s->sm.timeout) {
                 s->cur_pack.cont_len = 0;
-                proc_backend_packet(s, ip, tcp);
+                proc_bak_pack(s, ip, tcp);
                 if (s->sm.sess_over) {
                     sess_post_disp(s, false);
                 }
@@ -1512,7 +1493,7 @@ proc_outgress(unsigned char *pack)
             } else {
                 send_faked_rst(s, ip, tcp);
                 s->sm.state = CLOSED;
-                tc_user_timer_dispose(s, s->rtt, TYPE_RECONSTRUCT);
+                utimer_disp(s, s->rtt, TYPE_RECONSTRUCT);
                 s->prev_snd_node = NULL;
             }
         }
@@ -1537,7 +1518,7 @@ proc_clt_rst(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
         tcp->seq = htonl(s->target_nxt_seq);
     }
 
-    tc_snd_pack(s, ip, tcp, true);
+    send_pack(s, ip, tcp, true);
 
     if (s->sm.dst_closed) {
         s->sm.sess_over = 1;
@@ -1586,7 +1567,7 @@ proc_clt_syn(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 
     tc_log_debug1(LOG_DEBUG, 0, "syn port:%u", ntohs(s->src_port));
 
-    tc_snd_pack(s, ip, tcp, true);
+    send_pack(s, ip, tcp, true);
 }
 
 
@@ -1600,7 +1581,7 @@ proc_clt_fin(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
             if (s->sm.candidate_rep_wait) {
                 if (s->cur_pack.ack_seq == s->req_ack_snd_seq) {
                     s->sm.delay_snd = 1;
-                    tc_user_timer_dispose(s, s->rtt, TYPE_DELAY_ACK); 
+                    utimer_disp(s, s->rtt, TYPE_DELAY_ACK); 
                     return PACK_STOP;
                 }
                 if (s->rep_ack_seq == s->cur_pack.seq) {
@@ -1608,7 +1589,7 @@ proc_clt_fin(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
                 }
             } else {
                 if (s->rep_ack_seq == s->cur_pack.seq) {
-                    tc_snd_pack(s, ip, tcp, true);
+                    send_pack(s, ip, tcp, true);
                     return PACK_SLIDE;
                 }
             }
@@ -1631,7 +1612,7 @@ continue_diag(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
         tc_log_debug1(LOG_DEBUG, 0, "a new req,p:%u", ntohs(s->src_port));
         if (s->sm.candidate_rep_wait) {
             if (s->ev && (!(s->ev->timer_set))) {    
-                tc_user_timer_dispose(s, DEAD_LOCK_MS_TIMEOUT, TYPE_TIMEOUT);
+                utimer_disp(s, DEAD_LOCK_MS_TIMEOUT, TYPE_TIMEOUT);
             }
         }
     }
@@ -1676,7 +1657,7 @@ is_wait_greet(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 
 
 static bool
-prune_packet(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp, uint32_t diff)
+prune_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp, uint32_t diff)
 {
     uint16_t        size_tcp, tot_len;
     unsigned char  *payload;
@@ -1699,7 +1680,7 @@ prune_packet(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp, uint32_t diff)
 
 
 static int
-check_wait_prev_packet(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
+check_wait_prev_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 {
     int       diff;
     uint32_t  retransmit_seq;
@@ -1722,7 +1703,7 @@ check_wait_prev_packet(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
             return PACK_SLIDE;
         } else {
             diff = s->target_nxt_seq - s->cur_pack.seq;
-            if (prune_packet(s, ip, tcp, diff)) {
+            if (prune_pack(s, ip, tcp, diff)) {
                 return PACK_CONTINUE;
             }
         }
@@ -1732,11 +1713,11 @@ check_wait_prev_packet(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 
 
 static int
-is_continuous_packet(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
+is_continuous_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 {
     if (s->sm.candidate_rep_wait) {
         if (after(s->cur_pack.seq, s->req_con_snd_seq)) {
-            tc_snd_pack(s, ip, tcp, true);
+            send_pack(s, ip, tcp, true);
             tc_log_debug1(LOG_DEBUG, 0, "continuous:%u", ntohs(s->src_port));
             return PACK_NEXT;
         }
@@ -1757,7 +1738,7 @@ proc_clt_after_filter(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
                 clt_settings.plugin->proc_auth(s, ip, tcp);
             }
 #endif
-            tc_snd_pack(s, ip, tcp, true);
+            send_pack(s, ip, tcp, true);
             return;
         } else if (s->sm.state == SYN_CONFIRM) {
             if (clt_settings.default_rtt == 0) {
@@ -1772,7 +1753,7 @@ proc_clt_after_filter(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
                 tc_log_debug1(LOG_INFO, 0, "internal:%u", ntohs(s->src_port));
             }
             if (s->target_nxt_seq == s->cur_pack.seq) {
-                tc_snd_pack(s, ip, tcp, true);
+                send_pack(s, ip, tcp, true);
                 return;
             }
         }
@@ -1794,7 +1775,7 @@ proc_clt_after_filter(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
  * 
  */
 int
-proc_clt_packet(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
+proc_clt_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 {
     int       status;
     uint16_t  cont_len;
@@ -1868,13 +1849,13 @@ proc_clt_packet(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
             }
         }
 
-        status = check_wait_prev_packet(s, ip, tcp);
+        status = check_wait_prev_pack(s, ip, tcp);
         if (status != PACK_CONTINUE) {
             return status;
         }
 
         if (!s->cur_pack.new_req_flag) {
-            status = is_continuous_packet(s, ip, tcp);
+            status = is_continuous_pack(s, ip, tcp);
             if (status != PACK_CONTINUE) {
                 return status;
             }
@@ -1908,7 +1889,7 @@ get_tf_ip(uint16_t key)
 
 
 bool
-check_ingress_pack_needed(tc_iph_t *ip)
+tc_check_ingress_pack_needed(tc_iph_t *ip)
 {
     bool        is_needed = false;
     uint16_t    size_ip, size_tcp, tot_len, cont_len, hlen, 
@@ -2006,7 +1987,7 @@ check_ingress_pack_needed(tc_iph_t *ip)
 
 
 void
-output_stat()
+tc_output_stat()
 {
     double    ratio;
 
@@ -2046,15 +2027,15 @@ output_stat()
 
 
 void
-interval_dispose(tc_event_timer_t *ev)
+tc_interval_disp(tc_event_timer_t *ev)
 {
-    output_stat();
+    tc_output_stat();
     tc_event_update_timer(ev, OUTPUT_INTERVAL);
 }
 
 
 void 
-save_packet(tc_sess_t *s, link_list *list, tc_iph_t *ip, tc_tcph_t *tcp)
+tc_save_pack(tc_sess_t *s, link_list *list, tc_iph_t *ip, tc_tcph_t *tcp)
 {
     unsigned char *pkt = (unsigned char *) cp_fr_ip_pack(s->pool, ip);
     p_link_node    ln  = link_node_malloc(s->pool, pkt);
@@ -2086,13 +2067,13 @@ proc_clt_pack_directly(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
     cont_len = TCP_PAYLOAD_LENGTH(ip, tcp);
     if (cont_len > 0) {
         seq = ntohl(tcp->seq);
-        if (s->sm.max_record_con_seq) {
+        if (s->sm.record_mcon_seq) {
             if (after(seq, s->max_con_seq)) {
                 s->max_con_seq = seq;
             }
         } else {
             s->max_con_seq = seq;
-            s->sm.max_record_con_seq = 1;
+            s->sm.record_mcon_seq = 1;
         }
     } else {
         if (!s->sm.fake_syn) {
@@ -2102,7 +2083,7 @@ proc_clt_pack_directly(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
         }
     }
 
-    save_packet(s, s->slide_win_packs, ip, tcp);
+    tc_save_pack(s, s->slide_win_packs, ip, tcp);
     proc_clt_pack_from_buffer(s);
 }
 
@@ -2134,7 +2115,7 @@ proc_clt_pack_from_buffer(tc_sess_t *s)
         tcp = (tc_tcph_t *) ((char *) ip + size_ip);
         s->cur_pack.cont_len = 0;
 
-        status = proc_clt_packet(s, ip, tcp);
+        status = proc_clt_pack(s, ip, tcp);
 
         if (status == PACK_STOP) {
             s->req_con_cur_ack_seq  = s->req_con_ack_seq;
@@ -2159,7 +2140,7 @@ proc_clt_pack_from_buffer(tc_sess_t *s)
 
 
 bool
-proc_ingress(tc_iph_t *ip, tc_tcph_t *tcp)
+tc_proc_ingress(tc_iph_t *ip, tc_tcph_t *tcp)
 {
     int          rtt;
     bool         candi_prev_pack_detected;

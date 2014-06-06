@@ -55,8 +55,8 @@ address_find_sock(uint32_t ip, uint16_t port)
 static void
 address_add_sock(uint32_t ip, uint16_t port, int fd) 
 {
-    uint64_t  key;
     conns_t  *conns;
+    uint64_t  key;
 
     key = get_key(ip, port);
 
@@ -170,9 +170,9 @@ tcp_copy_release_resources()
 #endif 
     tc_log_info(LOG_WARN, 0, "sig %d received", tc_over); 
 
-    output_stat();
+    tc_output_stat();
 
-    destroy_sess_table();
+    tc_dest_sess_table();
 
 #if (TC_PLUGIN)
     if (clt_settings.plugin && clt_settings.plugin->exit_module) {
@@ -338,6 +338,7 @@ connect_to_server(tc_event_loop_t *ev_lp)
     return TC_OK;
 }
 
+
 #if (TC_DR)
 static void 
 restore_work(tc_event_timer_t *evt) 
@@ -354,7 +355,7 @@ tcp_copy_init(tc_event_loop_t *ev_lp)
 {
 
     tc_event_add_timer(ev_lp->pool, 60000, NULL, check_resource_usage);
-    tc_event_add_timer(ev_lp->pool, OUTPUT_INTERVAL, NULL, interval_dispose);
+    tc_event_add_timer(ev_lp->pool, OUTPUT_INTERVAL, NULL, tc_interval_disp);
 
 #if (TC_DR)
     if (clt_settings.lonely) {
@@ -366,7 +367,7 @@ tcp_copy_init(tc_event_loop_t *ev_lp)
     }
 #endif
 
-    if  (init_sess_table() == TC_ERR) {
+    if  (tc_init_sess_table() == TC_ERR) {
         return TC_ERR;
     }
 

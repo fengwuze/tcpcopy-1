@@ -18,13 +18,14 @@ hash_node_malloc(tc_pool_t *pool, uint64_t key, void *data)
     return hn;
 }
 
+
 static p_link_node
 hash_find_node(hash_table *table, uint64_t key)
 {
     bool         first = true;
     hash_node   *hn;
     link_list   *l  = get_link_list(table, key);
-    p_link_node  ln  = link_list_first(l);
+    p_link_node  ln = link_list_first(l);
 
     table->total_visit++;
 
@@ -91,6 +92,7 @@ hash_find(hash_table *table, uint64_t key)
     return NULL;
 }
 
+
 bool
 hash_add(hash_table *table, tc_pool_t *pool, uint64_t key, void *data)
 {
@@ -125,7 +127,7 @@ hash_add(hash_table *table, tc_pool_t *pool, uint64_t key, void *data)
 bool
 hash_del(hash_table *table, tc_pool_t *pool, uint64_t key)
 {
-    link_list   *l = get_link_list(table, key);
+    link_list  *l  = get_link_list(table, key);
     p_link_node ln = hash_find_node(table, key);
 
     if (ln != NULL) {
@@ -139,6 +141,7 @@ hash_del(hash_table *table, tc_pool_t *pool, uint64_t key)
         return false;
     }
 }
+
 
 void
 hash_set_timeout(hash_table *table, int t)

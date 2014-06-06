@@ -8,12 +8,12 @@ static uint64_t clt_udp_send_cnt = 0;
 
 
 int
-init_sess_table()
+tc_init_sess_table()
 {
 }
 
 void 
-destroy_sess_table()
+tc_dest_sess_table()
 {
 }
 
@@ -21,7 +21,7 @@ destroy_sess_table()
  * filter udp packets 
  */
 bool
-check_ingress_pack_needed(tc_iph_t *ip)
+tc_check_ingress_pack_needed(tc_iph_t *ip)
 {
     bool          is_needed = false;
     uint16_t      size_ip, size_udp, tot_len;
@@ -61,7 +61,7 @@ check_ingress_pack_needed(tc_iph_t *ip)
 
 
 void
-output_stat()
+tc_output_stat()
 {
     tc_log_info(LOG_INFO, 0, 
             "udp packets captured:%llu,packets sent:%llu",
@@ -70,9 +70,9 @@ output_stat()
 
 
 void
-interval_dispose(tc_event_timer_t *evt)
+tc_interval_disp(tc_event_timer_t *evt)
 {
-    output_stat();
+    tc_output_stat();
     tc_event_update_timer(evt, OUTPUT_INTERVAL);
 }
 
@@ -151,7 +151,7 @@ ip_fragmentation(tc_iph_t *ip, tc_udpt_t *udp)
     }
 }
 
-bool proc_outgress(unsigned char *packet)
+bool tc_proc_outgress(unsigned char *packet)
 {
     return true;
 }
@@ -159,7 +159,7 @@ bool proc_outgress(unsigned char *packet)
 /*
  * the main procedure for processing udp packets
  */
-bool proc_ingress(tc_iph_t *ip, tc_udpt_t *udp)
+bool tc_proc_ingress(tc_iph_t *ip, tc_udpt_t *udp)
 {
     int              ret;
     uint16_t         tot_len;

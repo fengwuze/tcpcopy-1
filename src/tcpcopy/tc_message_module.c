@@ -70,12 +70,12 @@ tc_proc_server_msg(tc_event_t *rev)
 #endif
     {
 #if (!TC_COMBINED)
-        proc_outgress((unsigned char *) &msg);
+        tc_proc_outgress((unsigned char *) &msg);
 #else
         tc_log_debug1(LOG_DEBUG, 0, "resp packets:%d", num);
         p = resp + sizeof(uint16_t);
         for (k = 0; k < num; k++) {
-            proc_outgress(p);
+            tc_proc_outgress(p);
             p = p + MSG_SERVER_SIZE;
         }
 #endif
