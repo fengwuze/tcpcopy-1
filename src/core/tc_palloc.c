@@ -19,7 +19,7 @@ tc_create_pool(size_t size, size_t pool_max)
 
         size = size - sizeof(tc_pool_t);
         
-        if (pool_max) {
+        if (pool_max && size >= pool_max) {
             p->max = pool_max;
         } else {
             p->max = (size < TC_MAX_ALLOC_FROM_POOL) ? 

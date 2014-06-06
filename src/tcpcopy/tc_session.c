@@ -206,17 +206,23 @@ sess_init(tc_sess_t *s)
 static tc_sess_t *
 sess_create(tc_iph_t *ip, tc_tcph_t *tcp)
 {
+    size_t           pool_size;
     tc_sess_t       *s;
     tc_pool_t       *pool;
     transfer_map_t  *test;
 
+#if (!TC_MILLION_SUPPORT)
     if (sess_table->total < TC_MID_U_POOL_SIZE_THRESH) {
-        pool = tc_create_pool(clt_settings.s_pool_size, TC_UPOOL_MAXV);
+        pool_size = clt_settings.s_pool_size;
     } else if (sess_table->total < TC_MIN_U_POOL_SIZE_THRESH) {
-        pool = tc_create_pool(TC_REDUCED_POOL_SIZE, TC_UPOOL_MAXV);
+        pool_size = TC_REDUCED_POOL_SIZE;
     } else {
-        pool = tc_create_pool(TC_MIN_POOL_SIZE, TC_UPOOL_MAXV);
+        pool_size = TC_MIN_POOL_SIZE;
     }
+#else
+    pool_size = TC_MIN_POOL_SIZE;
+#endif
+    pool = tc_create_pool(pool_size, TC_UPOOL_MAXV);
 
     if (pool == NULL) {
         return NULL;
@@ -336,7 +342,7 @@ sess_timeout(tc_event_timer_t *ev)
     s = ev->data;
     if (s != NULL) {
         if (s->sm.timeout) {
-            tc_log_info(LOG_INFO, 0, "last disp sess:%u", ntohs(s->src_port));
+            tc_log_debug1(LOG_INFO, 0, "last disp sess:%u", ntohs(s->src_port));
             sess_post_disp(s, true);
             return;
         }

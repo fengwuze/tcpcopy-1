@@ -93,7 +93,7 @@ typedef struct tc_sess_s        tc_sess_t;
 
 #define TC_POOL_ALIGNMENT       16
 #define TC_MIN_POOL_SIZE                                                     \
-        tc_align((sizeof(tc_pool_t) + 2 * sizeof(tc_pool_large_t)),            \
+        tc_align((sizeof(tc_pool_t) + 2 * sizeof(tc_pool_large_t)),          \
                               TC_POOL_ALIGNMENT)
 
 

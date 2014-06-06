@@ -406,7 +406,6 @@ output_for_debug(int argc, char **argv)
     tc_log_info(LOG_NOTICE, 0, "HAVE_PCAP_CREATE is true, new pap");
 #endif
 
-
 }
 
 
