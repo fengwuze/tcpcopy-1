@@ -10,6 +10,12 @@ tc_create_pool(size_t size, size_t pool_max)
 {
     tc_pool_t  *p;
 
+    if (size < TC_MIN_POOL_SIZE) {
+        tc_log_info(LOG_ERR, 0, "pool size must be no less than:%uz", 
+                TC_MIN_POOL_SIZE);
+        size = TC_MIN_POOL_SIZE;
+    }
+
     p = tc_memalign(TC_POOL_ALIGNMENT, size);
     if (p != NULL) {
         p->d.last = (u_char *) p + sizeof(tc_pool_t);
