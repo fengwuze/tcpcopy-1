@@ -97,8 +97,8 @@ typedef struct xcopy_clt_settings {
     unsigned int  default_rtt:16;      
 
     unsigned int  replica_num:10;       /* replicated number of each request */
-    unsigned int  s_pool_size:20;      
-    unsigned int  sess_mem_loop_size:21;
+    unsigned int  s_pool_size:18;      
+    unsigned int  sess_mem_loop_size:20;
 
     int           sess_timeout;         /* max value for session timeout.
                                            If reaching this value, the session

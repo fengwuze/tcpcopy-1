@@ -212,10 +212,10 @@ sess_create(tc_iph_t *ip, tc_tcph_t *tcp)
     transfer_map_t  *test;
 
 #if (!TC_MILLION_SUPPORT)
-    if (sess_table->total < TC_MID_U_POOL_SIZE_THRESH) {
+    if (sess_table->total < TC_MID_UPOOL_SIZE_THRESH) {
         pool_size = clt_settings.s_pool_size;
-    } else if (sess_table->total < TC_MIN_U_POOL_SIZE_THRESH) {
-        pool_size = TC_REDUCED_POOL_SIZE;
+    } else if (sess_table->total < TC_MIN_UPOOL_SIZE_THRESH) {
+        pool_size = TC_REDUCED_UPOOL_SIZE;
     } else {
         pool_size = TC_MIN_POOL_SIZE;
     }
@@ -1526,9 +1526,7 @@ proc_clt_rst(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 
     send_pack(s, ip, tcp, true);
 
-    if (s->sm.dst_closed) {
-        s->sm.sess_over = 1;
-    }
+    s->sm.sess_over = 1;
 
     return PACK_SLIDE;
 }
@@ -1625,6 +1623,7 @@ continue_diag(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 
     if (s->cur_pack.new_req_flag) {
         if (after(s->cur_pack.seq, s->req_con_snd_seq)) {
+            tc_log_debug1(LOG_DEBUG, 0, "stop req,p:%u", ntohs(s->src_port));
             return PACK_STOP;
         }
     } 
@@ -1766,7 +1765,8 @@ proc_clt_after_filter(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
     }
 
     if (s->cur_pack.cont_len > 0) {
-        tc_log_info(LOG_NOTICE, 0, "payload drop:%u", s->cur_pack.cont_len);
+        tc_log_info(LOG_NOTICE, 0, "payload drop:%u,p:%u", 
+                s->cur_pack.cont_len, ntohs(s->src_port));
     }
     tc_log_debug1(LOG_DEBUG, 0, "drop pack:%u", ntohs(s->src_port));
 }
@@ -1867,7 +1867,7 @@ proc_clt_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
             }
         }
 
-        tc_log_debug0(LOG_DEBUG, 0, "a new request from clt");
+        tc_log_debug1(LOG_INFO, 0, "new req from clt:%u", ntohs(s->src_port));
     }
 
     proc_clt_after_filter(s, ip, tcp);

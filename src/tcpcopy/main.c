@@ -110,7 +110,7 @@ usage(void)
     printf("-S <num>       MSS value sent back(default 1460)\n");
     printf("-R <num>       set default rtt value\n");
     printf("-U <num>       set default user session pool size in kilobytes.\n"
-           "               The maximum value allowed is 1023.\n");
+           "               The maximum value allowed is 255.\n");
     printf("-C <num>       parallel connections between tcpcopy and intercept.\n"
            "               The maximum value allowed is 16(default 2 connections).\n");
 #if (TC_DR)
@@ -793,8 +793,8 @@ set_details()
             clt_settings.sess_keepalive_timeout);
 
     if (clt_settings.s_pool_size == 0) {
-        clt_settings.s_pool_size = TC_DEFAULT_POOL_SIZE;
-        clt_settings.sess_mem_loop_size = clt_settings.s_pool_size << 1;
+        clt_settings.s_pool_size = TC_DEFAULT_UPOOL_SIZE;
+        clt_settings.sess_mem_loop_size = clt_settings.s_pool_size << 2;
     }
     tc_log_info(LOG_NOTICE, 0, "min pool size:%d", TC_MIN_POOL_SIZE);
     
@@ -931,8 +931,8 @@ settings_init()
     clt_settings.sess_keepalive_timeout = 0;
     clt_settings.par_conns = 2;
     clt_settings.sess_timeout = DEFAULT_SESS_TIMEOUT;
-    clt_settings.s_pool_size = TC_DEFAULT_POOL_SIZE;
-    clt_settings.sess_mem_loop_size = clt_settings.s_pool_size << 1;
+    clt_settings.s_pool_size = TC_DEFAULT_UPOOL_SIZE;
+    clt_settings.sess_mem_loop_size = clt_settings.s_pool_size << 2;
     
 #if (TC_PCAP)
     clt_settings.buffer_size = TC_PCAP_BUF_SIZE;
