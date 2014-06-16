@@ -21,10 +21,21 @@ static inline tc_sess_t *sess_add(uint64_t, tc_iph_t *, tc_tcph_t *);
 static inline void 
 reconstruct_sess(tc_sess_t *s) 
 {
+    bool loop_used = false;
+
     snd_rst(s);
 
     tc_log_debug1(LOG_INFO, 0, "sess reconstruct:%u", ntohs(s->src_port));
+
+    if (s->sm.pool_loop_used) {
+        loop_used = true;
+    }
+
     tc_memzero(&(s->sm), sizeof(sess_state_machine_t));
+
+    if (loop_used) {
+        s->sm.pool_loop_used = 1;
+    }
     s->sm.record_mcon_seq = 1;
     s->sm.recon = 1;
     tc_log_debug2(LOG_INFO, 0, "rtt:%u,p:%u", s->rtt, ntohs(s->src_port));
@@ -449,6 +460,7 @@ send_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp, bool client)
                 s->sm.small_payload_cnt++;
                 if (s->sm.small_payload_cnt == TC_UPOOL_LOOP_THRESH) {
                     s->sm.pool_loop_used = 1;
+                    tc_log_debug1(LOG_INFO, 0, "lpuse:%u", ntohs(s->src_port));
                     create_pool_loop(s->pool, clt_settings.sess_mem_loop_size);
                 }
             }
