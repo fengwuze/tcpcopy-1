@@ -62,12 +62,13 @@ link_list_clear(tc_pool_t *pool, link_list *l)
 void
 link_list_append_by_order(link_list *l, p_link_node p)
 {
-    p_link_node node, next;
+    p_link_node node, next, next_next;
 
     if (l->size > 0) {
         node = l->head.prev;
         next = node->next;
         while (node->data != NULL && after(node->key, p->key)) {
+            next_next = next;
             next = node;
             node = node->prev;
         }

@@ -460,7 +460,7 @@ send_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp, bool client)
                 s->sm.small_payload_cnt++;
                 if (s->sm.small_payload_cnt == TC_UPOOL_LOOP_THRESH) {
                     s->sm.pool_loop_used = 1;
-                    tc_log_debug1(LOG_INFO, 0, "lpuse:%u", ntohs(s->src_port));
+                    tc_log_info(LOG_INFO, 0, "lpuse:%u", ntohs(s->src_port));
                     create_pool_loop(s->pool, clt_settings.sess_mem_loop_size);
                 }
             }
@@ -811,7 +811,7 @@ send_faked_syn(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 static void
 fake_syn(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 {
-    tc_log_debug1(LOG_DEBUG, 0, "fake syn:%u", ntohs(s->src_port));
+    tc_log_debug1(LOG_DEBUG, 0, "fake syn:%u", ntohs(s->src_port)); 
         
 #if (!TC_SINGLE)
     if (!send_router_info(s, CLIENT_ADD)) {
@@ -891,8 +891,13 @@ retrans_pack(tc_sess_t *s, uint32_t expected_seq)
             tln = ln;
             ln = link_list_get_next(list, ln);
             link_list_remove(list, tln);
-            tc_pfree(s->pool, tln->data);
-            tc_pfree(s->pool, tln);
+            if (!s->sm.pool_loop_used) {
+                tc_pfree(s->pool, tln->data);
+                tc_pfree(s->pool, tln);
+            } else {
+                tc_pool_loop_free(s->pool, tln->data);
+                tc_pool_loop_free(s->pool, tln);
+            }
         }
     }
 
@@ -1315,6 +1320,10 @@ proc_bak_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
         if (s->wscale) {
             s->peer_window = s->peer_window << (s->wscale);
         }
+        if (s->peer_window > s->max_peer_window) {
+            s->max_peer_window = s->peer_window;
+        }
+
         if (s->sm.timestamp) {
             retrieve_options(s, TC_BAK, tcp);
         }
@@ -2055,10 +2064,11 @@ tc_interval_disp(tc_event_timer_t *ev)
 void 
 tc_save_pack(tc_sess_t *s, link_list *list, tc_iph_t *ip, tc_tcph_t *tcp)
 {
-    unsigned char *pkt = (unsigned char *) cp_fr_ip_pack(s->pool, ip);
-    p_link_node    ln  = link_node_malloc(s->pool, pkt);
+    unsigned char   *pkt = (unsigned char *) cp_fr_ip_pack(s->pool, ip);
+    p_link_node      ln  = link_node_malloc(s->pool, pkt);
 
     ln->key = ntohl(tcp->seq);
+
     link_list_append_by_order(list, ln);
 
     tc_log_debug2(LOG_INFO, 0, "save:%u,p:%u", ln->key, ntohs(s->src_port));
@@ -2082,9 +2092,22 @@ proc_clt_pack_directly(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
         }
     }
 
+    seq = ntohl(tcp->seq);
+    if (s->sm.state >= ESTABLISHED) {
+        if (s->sm.record_mcon_seq && after(seq, s->max_con_seq)) {
+            diff = seq - s->max_con_seq;
+            if (diff > s->max_peer_window) {
+                tc_log_info(LOG_INFO, 0, "diff:%d,max win:%u,p:%u", diff, 
+                        s->max_peer_window, ntohs(s->src_port));
+                return;
+            }
+        }
+    }
+
+    tc_save_pack(s, s->slide_win_packs, ip, tcp);
+
     cont_len = TCP_PAYLOAD_LENGTH(ip, tcp);
     if (cont_len > 0) {
-        seq = ntohl(tcp->seq);
         if (s->sm.record_mcon_seq) {
             if (after(seq, s->max_con_seq)) {
                 s->max_con_seq = seq;
@@ -2101,7 +2124,6 @@ proc_clt_pack_directly(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
         }
     }
 
-    tc_save_pack(s, s->slide_win_packs, ip, tcp);
     proc_clt_pack_from_buffer(s);
 }
 
