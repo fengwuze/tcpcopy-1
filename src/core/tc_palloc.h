@@ -36,7 +36,10 @@ struct tc_pool_s {
         int max;
         int fn;
     };
-    tc_pool_t             *current;
+    union {
+        tc_pool_t         *current;
+        time_t            last_check_time;
+    };
     union {
         tc_mem_hid_info_t *fp;
         tc_pool_large_t   *large;

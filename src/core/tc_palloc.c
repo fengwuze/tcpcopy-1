@@ -122,7 +122,8 @@ tc_palloc(tc_pool_t *pool, size_t size)
 }
 
 
-static bool tc_check_block_free(tc_pool_t *p)
+static bool 
+tc_check_block_free(tc_pool_t *p)
 {
     int                i;
     u_char            *m;
@@ -161,30 +162,31 @@ static bool tc_check_block_free(tc_pool_t *p)
 static void *
 tc_palloc_block(tc_pool_t *pool, size_t size)
 {
+    int         diff;
     bool        reused;
     u_char     *m;
     size_t      psize;
-    tc_pool_t  *p, *prev, *new, *current;
-
-    p    = pool->d.next;
-    prev = pool;
+    tc_pool_t  *p, *new, *current;
 
     reused = false;
 
-    for (; p; p = p->d.next) {
-        if (p->d.cand_check) {
+    p  = pool->d.next;
+    if (p && p->d.cand_check) {
+        
+        diff = tc_time() - p->last_check_time;
+        if (diff) {
+            p->last_check_time = tc_time();
             tc_log_info(LOG_INFO, 0, "main pool:%llu,tc_check_block_free:%llu", pool, p);
             if (tc_check_block_free(p)) {
                 tc_log_info(LOG_INFO, 0, "main pool:%llu,block reused:%llu", pool, p);
                 reused =true;
                 m = (u_char *) p;
                 new = p;
-                prev->d.next = p->d.next;
-                break;
+                pool->d.next = p->d.next;
+            } else {
+                tc_log_info(LOG_INFO, 0, "main pool:%llu,block could not reused:%llu", pool, p);
             }
         }
-
-        prev = p;
     }
 
     if (!reused) {
@@ -194,6 +196,7 @@ tc_palloc_block(tc_pool_t *pool, size_t size)
         if (m == NULL) {
             return NULL;
         }
+        tc_log_info(LOG_INFO, 0, "main pool:%llu,new block:%llu", pool, m);
         new = (tc_pool_t *) m;
         new->d.end  = m + psize;
     }
@@ -205,6 +208,7 @@ tc_palloc_block(tc_pool_t *pool, size_t size)
     new->d.need_check = 1;
     new->fp = NULL;
     new->fn = 0;
+    new->last_check_time = 0;
 
     m += sizeof(tc_pool_t);
     m = tc_align_ptr(m, TC_ALIGNMENT);
@@ -296,19 +300,30 @@ tc_pmemalign(tc_pool_t *pool, size_t size, size_t alignment)
 tc_int_t
 tc_pfree(tc_pool_t *pool, void *p)
 {
-    tc_pool_large_t   *l;
+    tc_pool_large_t   *l, *prev;
     tc_mem_hid_info_t *act_p;
     
-    act_p = (tc_mem_hid_info_t *) ((unsigned char *) p - MEM_HID_INFO_SZ);
+    act_p = (tc_mem_hid_info_t *) ((u_char *) p - MEM_HID_INFO_SZ);
 
     if (act_p->large) {
+        prev = NULL;
         for (l = pool->large; l; l = l->next) {
             if (act_p == l->alloc) {
                 tc_free(l->alloc);
                 l->alloc = NULL;
 
+                if (prev) {
+                    prev->next = l->next;
+                } else {
+                    pool->large = l->next;
+                }
+
+                act_p = (tc_mem_hid_info_t *) ((u_char *) l - MEM_HID_INFO_SZ);
+                act_p->released = 1;
+
                 return TC_OK;
             }
+            prev = l;
         }
     } else {
         act_p->released = 1;
