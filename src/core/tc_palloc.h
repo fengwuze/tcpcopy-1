@@ -4,6 +4,7 @@
 
 #include <xcopy.h>
 
+#define MEM_HID_INFO_SZ sizeof(tc_mem_hid_info_t)
 typedef struct tc_pool_large_s  tc_pool_large_t;
 typedef struct tc_pool_loop_s  tc_pool_loop_t;
 
@@ -12,29 +13,34 @@ struct tc_pool_large_s {
     void                *alloc;
 };
 
+typedef struct {
+    uint32_t len:18;
+    uint32_t large:1;
+    uint32_t released:1;
+} tc_mem_hid_info_t;
 
 typedef struct {
     u_char              *last;
     u_char              *end;
     tc_pool_t           *next;
-    tc_uint_t            failed;
+    uint32_t             objs:16;
+    uint32_t             failed:8;
+    uint32_t             need_check:1;
+    uint32_t             cand_check:1;
 } tc_pool_data_t;
-
-struct tc_pool_loop_s {
-    u_char              *start;
-    u_char              *last;
-    u_char              *end;
-    u_char              *last_freed;
-    unsigned int         wrap_around:1;
-}; 
 
 
 struct tc_pool_s {
-    tc_pool_data_t       d;
-    size_t               max;
-    tc_pool_t           *current;
-    tc_pool_large_t     *large;
-    tc_pool_loop_t      *loop;
+    tc_pool_data_t         d;
+    union {
+        int max;
+        int fn;
+    };
+    tc_pool_t             *current;
+    union {
+        tc_mem_hid_info_t *fp;
+        tc_pool_large_t   *large;
+    };
 };
 
 
@@ -42,16 +48,13 @@ void *tc_alloc(size_t size);
 void *tc_calloc(size_t size);
 
 tc_pool_t *tc_create_pool(size_t size, size_t pool_max);
-void create_pool_loop(tc_pool_t *p, size_t size);
 void tc_destroy_pool(tc_pool_t *pool);
 
 void *tc_palloc(tc_pool_t *pool, size_t size);
-void *tc_pnalloc(tc_pool_t *pool, size_t size);
-void *tc_palloc_loop(tc_pool_t *pool, size_t size);
 void *tc_pcalloc(tc_pool_t *pool, size_t size);
 void *tc_pmemalign(tc_pool_t *pool, size_t size, size_t alignment);
 tc_int_t tc_pfree(tc_pool_t *pool, void *p);
-tc_int_t tc_pool_loop_free(tc_pool_t *pool, void *p);
+
 
 
 #endif /* _TC_PALLOC_H_INCLUDED_ */

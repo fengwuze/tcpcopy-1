@@ -41,12 +41,10 @@ typedef struct sess_state_machine_s{
     uint32_t sess_over:1;
     uint32_t src_closed:1;
     uint32_t dst_closed:1;
-    uint32_t pool_loop_used:1;
     uint32_t timer_type:2;
     uint32_t rtt_cal:2;
     uint32_t rep_payload_type:2;
     uint32_t rep_dup_ack_cnt:8;
-    uint32_t small_payload_cnt:8;
 }sess_state_machine_t;
 
 typedef struct pack_info_s {

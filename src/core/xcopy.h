@@ -344,7 +344,7 @@ struct tc_module_s{
 #define TC_OK      0
 #define TC_ERR    -1
 #define TC_ERR_EXIT  1
-#define TC_DECLINED   -2
+#define TC_DELAYED  -2
 
 #define tc_cpymem(d, s, l) (((char *) memcpy(d, (void *) s, l)) + (l))
 #define tc_memzero(d, l) (memset(d, 0, l))

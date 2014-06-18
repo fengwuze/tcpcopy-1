@@ -30,11 +30,7 @@ cp_fr_ip_pack(tc_pool_t *pool, tc_iph_t *ip)
     tot_len   = ntohs(ip->tot_len);
     frame_len = ETHERNET_HDR_LEN + tot_len;
 
-    if (!pool->loop) {
-        frame = (unsigned char *) tc_palloc(pool, frame_len);
-    } else {
-        frame = (unsigned char *) tc_palloc_loop(pool, frame_len);
-    }
+    frame = (unsigned char *) tc_palloc(pool, frame_len);
 
     if (frame != NULL) {    
         memcpy(frame + ETHERNET_HDR_LEN, ip, tot_len);

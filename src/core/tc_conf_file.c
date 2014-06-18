@@ -27,7 +27,7 @@ tc_conf_full_name(tc_pool_t *pool, char *prefix, char *name)
 
     pref_len = strlen(prefix);
     name_len = strlen(name);
-    n = tc_pnalloc(pool, pref_len + name_len + 1);
+    n = tc_palloc(pool, pref_len + name_len + 1);
     if (n == NULL) {
         return NULL;
     }
@@ -415,7 +415,7 @@ tc_conf_read_token(tc_conf_t *cf)
                     return TC_ERR;
                 }
 
-                word->data = tc_pnalloc(cf->pool, b->pos - start + 1);
+                word->data = tc_palloc(cf->pool, b->pos - start + 1);
                 if (word->data == NULL) {
                     return TC_ERR;
                 }
