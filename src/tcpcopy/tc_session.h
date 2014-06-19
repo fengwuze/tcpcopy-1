@@ -83,7 +83,6 @@ struct tc_sess_s {
     uint16_t rtt;
     
     uint32_t peer_window;
-    uint32_t max_peer_window;
     uint32_t ts_ec_r;
     uint32_t ts_value;
 

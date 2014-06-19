@@ -1291,9 +1291,6 @@ proc_bak_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
         if (s->wscale) {
             s->peer_window = s->peer_window << (s->wscale);
         }
-        if (s->peer_window > s->max_peer_window) {
-            s->max_peer_window = s->peer_window;
-        }
 
         if (s->sm.timestamp) {
             retrieve_options(s, TC_BAK, tcp);
@@ -2055,23 +2052,12 @@ proc_clt_pack_directly(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 
     tc_log_debug_trace(LOG_DEBUG, 0, TC_CLT, ip, tcp);
 
+    seq  = ntohl(tcp->seq);
     diff = tc_time() - s->create_time;
     if (diff < TCP_MS_TIMEOUT && (s->sm.state & SYN_SENT)) {
-        if (before(ntohl(tcp->seq), s->req_syn_seq)) {
+        if (before(seq, s->req_syn_seq)) {
             tc_log_debug1(LOG_INFO, 0, "timeout pack,p:%u", ntohs(s->src_port));
             return;
-        }
-    }
-
-    seq = ntohl(tcp->seq);
-    if (s->sm.state >= ESTABLISHED) {
-        if (s->sm.record_mcon_seq && after(seq, s->max_con_seq)) {
-            diff = seq - s->max_con_seq;
-            if (diff > s->max_peer_window) {
-                tc_log_debug3(LOG_INFO, 0, "diff:%d,max win:%u,p:%u", diff, 
-                        s->max_peer_window, ntohs(s->src_port));
-                return;
-            }
         }
     }
 
