@@ -143,7 +143,6 @@ tc_check_block_free(tc_pool_t *p)
         if (!hid->released) {
             p->fp = hid;
             p->fn = i;
-            tc_log_info(LOG_INFO, 0, "block check:%llu, index:%d not released", p, i);
             return false;
         }
         m += hid->len;
@@ -176,15 +175,11 @@ tc_palloc_block(tc_pool_t *pool, size_t size)
         diff = tc_time() - p->last_check_time;
         if (diff) {
             p->last_check_time = tc_time();
-            tc_log_info(LOG_INFO, 0, "main pool:%llu,tc_check_block_free:%llu", pool, p);
             if (tc_check_block_free(p)) {
-                tc_log_info(LOG_INFO, 0, "main pool:%llu,block reused:%llu", pool, p);
                 reused =true;
                 m = (u_char *) p;
                 new = p;
                 pool->d.next = p->d.next;
-            } else {
-                tc_log_info(LOG_INFO, 0, "main pool:%llu,block could not reused:%llu", pool, p);
             }
         }
     }
@@ -196,7 +191,6 @@ tc_palloc_block(tc_pool_t *pool, size_t size)
         if (m == NULL) {
             return NULL;
         }
-        tc_log_info(LOG_INFO, 0, "main pool:%llu,new block:%llu", pool, m);
         new = (tc_pool_t *) m;
         new->d.end  = m + psize;
     }
@@ -220,7 +214,6 @@ tc_palloc_block(tc_pool_t *pool, size_t size)
     for (p = current; p->d.next; p = p->d.next) {
         if (p->d.failed++ > 4) {
             if (p->d.need_check) {
-                tc_log_info(LOG_INFO, 0, "set cand check:%llu", p);
                 p->d.cand_check = 1;
             }
             current = p->d.next;

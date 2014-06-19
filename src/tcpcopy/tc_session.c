@@ -2068,7 +2068,7 @@ proc_clt_pack_directly(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
         if (s->sm.record_mcon_seq && after(seq, s->max_con_seq)) {
             diff = seq - s->max_con_seq;
             if (diff > s->max_peer_window) {
-                tc_log_info(LOG_INFO, 0, "diff:%d,max win:%u,p:%u", diff, 
+                tc_log_debug3(LOG_INFO, 0, "diff:%d,max win:%u,p:%u", diff, 
                         s->max_peer_window, ntohs(s->src_port));
                 return;
             }
