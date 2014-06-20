@@ -761,17 +761,15 @@ read_conf_file()
 static int
 set_details()
 {
-#if (!TC_PCAP)
-    int            n, rand_port;
-#else
-    int            n, len, rand_port;
-#endif
+    int            mtu_list[] = {576, 1492, 1500, 0};
+    int            i, len, index, offset, rand_port;
     unsigned int   seed;
+    unsigned char  value;
     struct timeval tp;
 
     tc_pagesize = getpagesize();
     tc_cacheline_size = TC_CPU_CACHE_LINE; 
-    for (n = tc_pagesize; n >>= 1; tc_pagesize_shift++) { /* void */ }
+    for (i = tc_pagesize; i >>= 1; tc_pagesize_shift++) { /* void */ }
 
     /* generate a random port number for avoiding port conflicts */
     gettimeofday(&tp, NULL);
@@ -822,6 +820,23 @@ set_details()
     }
     tc_log_info(LOG_NOTICE, 0, "parallel connections per target:%d",
             clt_settings.par_conns);
+
+    len = sizeof(mtu_list) / sizeof(int) - 1;
+    for (i = 0; i < len; i++) {
+        if (mtu_list[i] == clt_settings.mtu) {
+            break;
+        }
+    }
+    if (i == len) {
+        mtu_list[len++] = clt_settings.mtu;
+    }
+    for (i = 0; i < len; i++) {
+        index = mtu_list[i] >> 3;
+        offset = mtu_list[i] - (index << 3);
+        value = clt_settings.candidate_mtu[index];
+        value = value | (1 << offset);
+        clt_settings.candidate_mtu[index] = value;
+    }
 
 #if (TC_OFFLINE)
     if (clt_settings.pcap_file == NULL) {
@@ -917,11 +932,6 @@ set_details()
 static void
 settings_init()
 {
-    int           i, mtu, index, offset;
-    int           mtu_list[] = {576, 1492, 1500};
-    unsigned char value;
-
-
     /* init values */
     clt_settings.mtu = DEFAULT_MTU;
     clt_settings.mss = DEFAULT_MSS;
@@ -941,18 +951,7 @@ settings_init()
     clt_settings.output_if_name = NULL;
 #endif
 
-    for (i = 0; i < sizeof(mtu_list) / sizeof(int); i++) {
-        mtu = mtu_list[i];
-        index = mtu >> 3;
-        offset = mtu - (index << 3);
-        value = clt_settings.candidate_mtu[index];
-        value = value | (1 << offset);
-
-        clt_settings.candidate_mtu[index] = value;
-    }
-
     tc_raw_socket_out = TC_INVALID_SOCK;
-
 }
 
 

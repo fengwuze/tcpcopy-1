@@ -486,7 +486,6 @@ timeval_diff(struct timeval *start, struct timeval *cur)
     if (usec > 0) {
         return (uint64_t) usec;
     } else {
-        tc_log_info(LOG_NOTICE, 0, "usec is less than 0:%lld", usec);
         return 0;
     }
 }
