@@ -680,12 +680,28 @@ extract_filter()
 }
 #endif
 
+
+static bool 
+check_client_ip_valid(uint32_t ip)
+{
+    int   i;
+
+    for (i = 0; i < clt_settings.transfer.num; i++) {
+        if (ip == clt_settings.transfer.map[i]->target_ip) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+
 static int 
 retrieve_clt_tf_ips() 
 {
-    int          count = 0;
-    char        *split, *p;
-    uint32_t     ip;
+    int          count = 0, len, i;
+    char        *split, *p, tmp_ip[32], *q; 
+    uint32_t     ip; 
 
     p = clt_settings.raw_clt_tf_ip;
 
@@ -693,28 +709,56 @@ retrieve_clt_tf_ips()
         split = strchr(p, ',');
         if (split != NULL) {
             *split = '\0';
-        }
+        }   
 
-        ip = inet_addr(p);
+        len = strlen(p);
+        if (len == 0) {
+            tc_log_info(LOG_WARN, 0, "ip is empty");
+            break;
+        }   
+
+        if (p[len - 1] == '*') {
+            strncpy(tmp_ip, p, len -1);
+            q = tmp_ip + len - 1;
+            for (i = 1; i < 255; i++) {
+                sprintf(q, "%d", i);
+                ip = inet_addr(tmp_ip);
+                tc_log_debug1(LOG_DEBUG, 0, "clt ip addr:%s", tmp_ip);
+                if (check_client_ip_valid(ip)) {
+                    clt_settings.clt_tf_ip[count++] = ip; 
+                    if (count == M_IP_NUM) {
+                        tc_log_info(LOG_WARN, 0, "reach limit for clt ips");
+                        break;
+                    }
+                }
+            }
+        } else {
+            ip = inet_addr(p);
+            if (check_client_ip_valid(ip)) {
+                clt_settings.clt_tf_ip[count++] = ip; 
+                if (count == M_IP_NUM) {
+                    tc_log_info(LOG_WARN, 0, "reach limit for clt ips");
+                    break;
+                }   
+            }
+        }
 
         if (split != NULL) {
             *split = ',';
-        }
-
-        clt_settings.clt_tf_ip[count++] = ip;
+        }   
 
         if (count == M_IP_NUM) {
             tc_log_info(LOG_WARN, 0, "reach the limit for clt_tf_ip");
             break;
-        }
+        }   
 
         if (split == NULL) {
             break;
         } else {
             p = split + 1;
-        }
+        }   
 
-    }
+    }   
 
     clt_settings.clt_tf_ip_num = count;
 
@@ -797,16 +841,16 @@ set_details()
     tc_log_info(LOG_NOTICE, 0, "min pool size:%d", TC_MIN_POOL_SIZE);
     
 
+    /* set the ip port pair mapping according to settings */
+    if (retr_target_addrs(clt_settings.raw_tf, &clt_settings.transfer) == -1) {
+        return -1;
+    }
+
     if (clt_settings.raw_clt_tf_ip != NULL) {
         /* print out raw_clt_tf_ip */
         tc_log_info(LOG_NOTICE, 0, "raw_clt_tf_ip:%s", 
                 clt_settings.raw_clt_tf_ip);
         retrieve_clt_tf_ips();
-    }
-
-    /* set the ip port pair mapping according to settings */
-    if (retr_target_addrs(clt_settings.raw_tf, &clt_settings.transfer) == -1) {
-        return -1;
     }
 
     if (clt_settings.percentage > 99) {

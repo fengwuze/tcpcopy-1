@@ -76,7 +76,7 @@ typedef struct tc_sess_s        tc_sess_t;
 #define IP_RCV_BUF_SIZE 65536
 #define PCAP_RCV_BUF_SIZE 65535
 #define MAX_FILTER_LENGH 4096 
-#define M_IP_NUM 256
+#define M_IP_NUM 4096
 
 #define SESS_TABLE_POOL_SIZE 1048576
 #define TC_PCAP_BUF_SIZE 16777216
