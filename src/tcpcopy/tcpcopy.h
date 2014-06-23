@@ -84,7 +84,7 @@ typedef struct xcopy_clt_settings {
 #if (TC_DR)
     unsigned int  lonely:1;             /* Lonely for tcpcopy */
 #endif
-    unsigned int  port_reshaped:1;
+    unsigned int  gradully:1;
     unsigned int  target_localhost:1;
     unsigned int  do_daemonize:1;       /* daemon flag */
     unsigned int  max_rss:21;           /* max memory allowed for tcpcopy */
@@ -185,7 +185,7 @@ typedef struct tc_stat_s {
     uint64_t clt_con_retrans_cnt; 
     uint64_t recon_for_closed_cnt; 
     uint64_t recon_for_no_syn_cnt; 
-    time_t   start_p_time; 
+    time_t   start_pt; 
 }tc_stat_t;
 
 extern int tc_raw_socket_out;

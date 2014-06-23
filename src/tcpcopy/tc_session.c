@@ -1946,6 +1946,17 @@ tc_check_ingress_pack_needed(tc_iph_t *ip)
         hlen = size_tcp + size_ip;
         if (tot_len >= hlen) {
 
+            if (clt_settings.gradully && clt_settings.percentage < 100) {
+                if (tc_stat.start_pt) {
+                    clt_settings.percentage = tc_time() - tc_stat.start_pt + 1;
+                    if (clt_settings.percentage > 100) {
+                        clt_settings.percentage = 100;
+                    }
+                } else {
+                    clt_settings.percentage = 1;
+                }
+            }
+
             if (clt_settings.percentage) {
                 key = 0xFFFF & (tcp->source + ip->saddr);
                 key = ((key & 0xFF00) >> 8) + (key & 0x00FF);
@@ -1988,7 +1999,7 @@ tc_output_stat()
 {
     double    ratio;
 
-    if (tc_stat.start_p_time != 0) {
+    if (tc_stat.start_pt != 0) {
         tc_log_info(LOG_NOTICE, 0, "active:%u,rel reqs:%llu,obs del:%llu",
                 sess_table->total, tc_stat.leave_cnt, tc_stat.obs_cnt);
         tc_log_info(LOG_NOTICE, 0, "conns:%llu,resp:%llu,c-resp:%llu",
@@ -2012,7 +2023,7 @@ tc_output_stat()
         tc_log_info(LOG_NOTICE, 0, "total captured pakcets:%llu", 
                 tc_stat.captured_cnt);
 
-        if ((tc_time() - tc_stat.start_p_time) > 3) {
+        if ((tc_time() - tc_stat.start_pt) > 3) {
             if (sess_table->total > 0) {
                 ratio = 100 * tc_stat.conn_cnt / sess_table->total;
                 if (ratio < 80) {
@@ -2148,8 +2159,8 @@ tc_proc_ingress(tc_iph_t *ip, tc_tcph_t *tcp)
     uint64_t     key;
     tc_sess_t   *s;
 
-    if (tc_stat.start_p_time == 0) {
-        tc_stat.start_p_time = tc_time();
+    if (tc_stat.start_pt == 0) {
+        tc_stat.start_pt = tc_time();
     }
 
     if (clt_settings.factor) {

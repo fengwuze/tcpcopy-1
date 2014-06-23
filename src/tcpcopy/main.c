@@ -180,6 +180,7 @@ read_args(int argc, char **argv)
 #if (TC_DR)
          "L"  /* lonely */
 #endif
+         "g"  
          "h"  /* help, licence info */
          "v"  /* version */
          "d"  /* daemon mode */
@@ -260,6 +261,9 @@ read_args(int argc, char **argv)
                 break;
             case 'k':
                 clt_settings.sess_keepalive_timeout = atoi(optarg);
+                break;
+            case 'g':
+                clt_settings.gradully = 1;
                 break;
             case 'h':
                 usage();
@@ -840,6 +844,9 @@ set_details()
     }
     tc_log_info(LOG_NOTICE, 0, "min pool size:%d", TC_MIN_POOL_SIZE);
     
+    if (clt_settings.gradully) {
+        tc_log_info(LOG_NOTICE, 0, "gradully replay");
+    }
 
     /* set the ip port pair mapping according to settings */
     if (retr_target_addrs(clt_settings.raw_tf, &clt_settings.transfer) == -1) {
@@ -946,10 +953,6 @@ set_details()
         return -1;
     }
 #endif
-
-    if (clt_settings.replica_num > 1 || clt_settings.clt_tf_ip_num > 0) {
-        clt_settings.port_reshaped = 1;
-    }
 
 #if (TC_PLUGIN)
     /* support only one additional module*/
