@@ -62,10 +62,10 @@ usage(void)
     printf("-H <ip_addr>   change the localhost IP address to the given IP address\n");
     printf("-c <ip_addr,>  change the client IP to one of IP addresses when sending to the\n"
            "               target server. For example,\n"
-           "               './tcpcopy -x 8080-192.168.0.2:8080 -c 192.168.0.1' would copy\n"
+           "               './tcpcopy -x 8080-192.168.0.2:8080 -c 62.135.200.*' would copy\n"
            "               requests from port '8080' of current online server to the target port\n"
            "               '8080' of target server '192.168.0.2' and modify the client IP to be\n"
-           "               '192.168.0.1'.\n");
+           "               one of net 62.135.200.0/24.\n");
 #if (TC_OFFLINE)
     printf("-i <file>      set the pcap file used for tcpcopy to <file> (only valid for the\n"
            "               offline version of tcpcopy when it is configured to run at\n"
@@ -146,7 +146,7 @@ read_args(int argc, char **argv)
     opterr = 0;
     while (-1 != (c = getopt(argc, argv,
          "x:" /* <transfer,> */
-         "c:" /* the localhost client ip will be changed to this ip address */
+         "c:" 
 #if (TC_OFFLINE)
          "i:" /* input pcap file */
          "a:" /* accelerated times */
@@ -291,7 +291,7 @@ read_args(int argc, char **argv)
                                 optopt);
                         break;
                     case 'c':
-                        fprintf(stderr, "tcpcopy: option -%c require a ip address\n", 
+                        fprintf(stderr, "tcpcopy: option -%c require a ip address or a sub net\n", 
                                 optopt);
                         break;
 #if (TC_OFFLINE)

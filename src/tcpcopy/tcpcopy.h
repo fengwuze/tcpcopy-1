@@ -174,6 +174,8 @@ typedef struct tc_stat_s {
     uint64_t fin_sent_cnt; 
     uint64_t rst_sent_cnt; 
     uint64_t con_packs_sent_cnt; 
+    uint64_t resp_rst_cnt; 
+    uint64_t resp_fin_cnt; 
     uint64_t resp_cnt; 
     uint64_t resp_cont_cnt; 
     uint64_t conn_cnt; 

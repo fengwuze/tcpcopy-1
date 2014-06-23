@@ -1363,10 +1363,12 @@ proc_bak_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
             if (tcp->syn) {
                 proc_bak_syn(s, ip, tcp);
             } else if (tcp->fin) {
+                tc_stat.resp_fin_cnt++;
                 proc_bak_fin(s, ip, tcp);
             }
         }
     } else {
+        tc_stat.resp_rst_cnt++;
         tc_log_debug1(LOG_DEBUG, 0, "reset:%u", ntohs(s->src_port));
         if (s->sm.record_mcon_seq) {
             if (after(s->max_con_seq, s->req_con_snd_seq)) {
@@ -1991,6 +1993,8 @@ tc_output_stat()
                 sess_table->total, tc_stat.leave_cnt, tc_stat.obs_cnt);
         tc_log_info(LOG_NOTICE, 0, "conns:%llu,resp:%llu,c-resp:%llu",
                 tc_stat.conn_cnt, tc_stat.resp_cnt, tc_stat.resp_cont_cnt);
+        tc_log_info(LOG_NOTICE, 0, "resp fin:%llu,resp rst:%llu",
+                tc_stat.resp_fin_cnt, tc_stat.resp_rst_cnt);
         tc_log_info(LOG_NOTICE, 0, "send:%llu,send content:%llu",
                 tc_stat.packs_sent_cnt, tc_stat.con_packs_sent_cnt);
         tc_log_info(LOG_NOTICE, 0, "send fin:%llu,send reset:%llu",
