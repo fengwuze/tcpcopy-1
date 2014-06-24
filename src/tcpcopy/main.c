@@ -843,6 +843,7 @@ set_details()
         clt_settings.sess_mem_loop_size = clt_settings.s_pool_size << 2;
     }
     tc_log_info(LOG_NOTICE, 0, "min pool size:%d", TC_MIN_POOL_SIZE);
+    tc_log_info(LOG_NOTICE, 0, "sess pool size:%d", clt_settings.s_pool_size);
     
     if (clt_settings.gradully) {
         tc_log_info(LOG_NOTICE, 0, "gradully replay");

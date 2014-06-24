@@ -17,6 +17,7 @@ void tc_dest_sess_table();
 void tc_save_pack(tc_sess_t *, link_list *, tc_iph_t *, tc_tcph_t *);
 bool tc_proc_ingress(tc_iph_t *, tc_tcph_t *);
 bool tc_proc_outgress(unsigned char *);
+uint32_t get_tf_ip(uint16_t key);
 bool tc_check_ingress_pack_needed(tc_iph_t *);
 void tc_interval_disp(tc_event_timer_t *);
 void tc_output_stat();

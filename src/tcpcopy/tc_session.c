@@ -217,7 +217,11 @@ sess_create(tc_iph_t *ip, tc_tcph_t *tcp)
     if (sess_table->total < TC_MID_UPOOL_SIZE_THRESH) {
         pool_size = clt_settings.s_pool_size;
     } else if (sess_table->total < TC_MIN_UPOOL_SIZE_THRESH) {
-        pool_size = TC_REDUCED_UPOOL_SIZE;
+        if (clt_settings.s_pool_size < TC_REDUCED_UPOOL_SIZE) {
+            pool_size = clt_settings.s_pool_size;
+        } else {
+            pool_size = TC_REDUCED_UPOOL_SIZE;
+        }
     } else {
         pool_size = TC_MIN_POOL_SIZE;
     }
@@ -1866,7 +1870,7 @@ proc_clt_pack(tc_sess_t *s, tc_iph_t *ip, tc_tcph_t *tcp)
 }
 
 
-static inline uint32_t
+uint32_t
 get_tf_ip(uint16_t key) 
 {
     uint16_t cnt;

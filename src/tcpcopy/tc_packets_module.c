@@ -306,7 +306,7 @@ static void
 replicate_packs(tc_iph_t *ip, tc_tcph_t *tcp, int replica_num)
 {
     int       i;
-    uint16_t  orig_port, addition, dest_port, rand_port;
+    uint16_t  tf_key, orig_port, addition, dest_port, rand_port;
     
     rand_port  = clt_settings.rand_port_shifted;
     orig_port  = ntohs(tcp->source);
@@ -316,8 +316,10 @@ replicate_packs(tc_iph_t *ip, tc_tcph_t *tcp, int replica_num)
         addition   = (((i << 1) - 1) << 5) + rand_port;
         dest_port  = get_appropriate_port(orig_port, addition);
         tcp->source = htons(dest_port);
-        tc_log_debug2(LOG_DEBUG, 0, "orig port :%u,new port:%u", 
-                orig_port, dest_port);
+        if (clt_settings.clt_tf_ip_num > 0) {
+            tf_key = get_ip_key((ip->saddr << 1) + addition);
+            ip->saddr = get_tf_ip(tf_key);
+        }
         tc_proc_ingress(ip, tcp);
     }
 }
